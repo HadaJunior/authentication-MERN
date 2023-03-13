@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 const port = 3000;
 const mongoose = require("mongoose");
+const bcrypt = require('bcryptjs');
 //connect to mongoose
 mongoose
   .connect(
@@ -45,12 +46,18 @@ app.get("/login", (req, res) => {
   res.render("login");
 });
 
+app.get("/protected", (req, res) => {
+  res.render("protected");
+});
+
 //login an user who's registered in our database
 app.post("/login", async (req, res) => {  
   try {
   let userFound = await User.findOne({username: req.body.username});
 
-  if ( userFound.password === req.body.password ){
+  const isPasswordValid = await bcrypt.compare(req.body.password, userFound.password);
+
+  if ( isPasswordValid ){
     return res.redirect(`/profile/${userFound._id}`)
   };
 
@@ -67,11 +74,17 @@ app.get("/register", (req, res) => {
 });
 
 //create a new user
-app.post("/register", (req, res) => {
+app.post("/register", async (req, res) => {
+  const { username, fullName, password } = req.body;
+
+  //generate a salt, the more higher the salt the more secure the password
+  const salt = await bcrypt.genSalt();
+  const hashedPassword = await bcrypt.hash(password, salt);
+
   User.create({
-    username: req.body.username,
-    fullName: req.body.fullName,
-    password: req.body.password
+    username,
+    fullName,
+    password: hashedPassword
   }).then(user => { res.redirect(`/profile/${user._id}`); })
   .catch(error => { res.send(error); });
 });
