@@ -40,19 +40,50 @@ app.get("/", (req, res) => {
   res.render("index");
 });
 
-//login
+//get the login form
 app.get("/login", (req, res) => {
   res.render("login");
 });
 
-//Register
+//login an user who's registered in our database
+app.post("/login", async (req, res) => {  
+  try {
+  let userFound = await User.findOne({username: req.body.username});
+
+  if ( userFound.password === req.body.password ){
+    return res.redirect(`/profile/${userFound._id}`)
+  };
+
+  res.send('Bad credentials' );
+
+  } catch (error) {
+    res.send(error);
+  }
+});
+
+// get the register form
 app.get("/register", (req, res) => {
   res.render("register");
 });
 
+//create a new user
+app.post("/register", (req, res) => {
+  User.create({
+    username: req.body.username,
+    fullName: req.body.fullName,
+    password: req.body.password
+  }).then(user => { res.redirect(`/profile/${user._id}`); })
+  .catch(error => { res.send(error); });
+});
+
 //profile
-app.get("/profile", (req, res) => {
-  res.render("profile");
+app.get("/profile/:id", async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.params.id });
+    res.render("profile", { user });
+  } catch (error) {
+    res.send(error);
+  }
 });
 
 //listen
