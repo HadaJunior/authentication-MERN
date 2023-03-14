@@ -3,6 +3,11 @@ const app = express();
 const port = 3000;
 const mongoose = require("mongoose");
 const bcrypt = require('bcryptjs');
+const cookieparser = require('cookie-parser');
+
+//static files
+app.use(express.static(__dirname + "/public"));
+
 //connect to mongoose
 mongoose
   .connect(
@@ -27,14 +32,22 @@ const User = mongoose.model("User", userSchema);
 //view engine setup ejs
 app.set("view engine", "ejs");
 
-//static files
-app.use(express.static("public"));
-
 //pass json data
 app.use(express.json());
 
 //pass form data
 app.use(express.urlencoded({ extended: true }));
+
+//pass the cookies
+app.use(cookieparser());
+
+//---------
+//Cookies
+//---------
+app.get('/send-cookies', (req, res) => {
+  res.cookie('name', 'Cesar');
+  res.send('Cookie sent');
+})
 
 //routes
 app.get("/", (req, res) => {
@@ -47,7 +60,9 @@ app.get("/login", (req, res) => {
 });
 
 app.get("/protected", (req, res) => {
-  res.render("protected");
+  let user = req.cookies.username;
+  console.log(user);
+  res.render("protected", { user });
 });
 
 //login an user who's registered in our database
@@ -55,10 +70,19 @@ app.post("/login", async (req, res) => {
   try {
   let userFound = await User.findOne({username: req.body.username});
 
-  const isPasswordValid = await bcrypt.compare(req.body.password, userFound.password);
+  let isPasswordValid = bcrypt.compare(req.body.password, userFound.password);
 
   if ( isPasswordValid ){
-    return res.redirect(`/profile/${userFound._id}`)
+    //make the cookie secure
+    res.cookie('username', userFound.username, {
+      httpOnly: true,
+      secure: true
+    });
+    res.cookie('fullname', userFound.fullName, {
+      httpOnly: true,
+      secure: true
+    });
+    return res.redirect(`/profile/${userFound._id}`);
   };
 
   res.send('Bad credentials' );
@@ -68,6 +92,12 @@ app.post("/login", async (req, res) => {
   }
 });
 
+//disconnect the user
+app.get('/logout', (req, res) => {
+  res.clearCookie('username');
+  res.clearCookie('fullname');
+  res.redirect('/login');
+});
 // get the register form
 app.get("/register", (req, res) => {
   res.render("register");
@@ -85,7 +115,12 @@ app.post("/register", async (req, res) => {
     username,
     fullName,
     password: hashedPassword
-  }).then(user => { res.redirect(`/profile/${user._id}`); })
+  }).then(user => { 
+    res.cookie('username', user.username);
+    res.cookie('fullname', user.fullName);
+  
+    res.redirect(`/profile/${user._id}`); 
+  })
   .catch(error => { res.send(error); });
 });
 
