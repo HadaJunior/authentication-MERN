@@ -9,17 +9,14 @@
   </head>
   <body>
     <%-include('partials/nav.ejs')%>
-    <% if(user) { %>
     <h1>Welcome to your protected page</h1>
         <div class="cardContainer">
           <div class="card">
             <div class="cardHeader">
               <h2>Profile</h2>
+              <a href="/profile/<%= identifiant %>">Profile page</a>
             </div>
           </div>
         </div>
-    <% } else { %>
-        <h1>You are not connected</h1>
-    <% } %>
   </body>
 </html>

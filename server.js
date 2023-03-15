@@ -1,9 +1,11 @@
+require('dotenv').config();
 const express = require("express");
 const app = express();
 const port = 3000;
 const mongoose = require("mongoose");
 const bcrypt = require('bcryptjs');
-const cookieparser = require('cookie-parser');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
 
 //static files
 app.use(express.static(__dirname + "/public"));
@@ -29,6 +31,18 @@ const userSchema = new mongoose.Schema({
 //model
 const User = mongoose.model("User", userSchema);
 
+//middleware for the session
+app.use(session({
+  secret: process.env.SECRET,
+  resave: true,
+  saveUninitialized: true,
+  cookie: { maxAge: 60000},
+  store: new MongoStore({
+    mongoUrl: 'mongodb+srv://hadajunior5:W2Izcs89dsPIqwwq@mongodb-demo.xjcty6t.mongodb.net/userMERN?retryWrites=true&w=majority',
+    ttl: 14 * 24 * 60 * 60
+  }),
+}));
+
 //view engine setup ejs
 app.set("view engine", "ejs");
 
@@ -38,19 +52,17 @@ app.use(express.json());
 //pass form data
 app.use(express.urlencoded({ extended: true }));
 
-//pass the cookies
-app.use(cookieparser());
-
-//---------
-//Cookies
-//---------
-app.get('/send-cookies', (req, res) => {
-  res.cookie('name', 'Cesar');
-  res.send('Cookie sent');
-})
+//middleware to check if the user is connected or not
+const protected = (req, res, next) => {
+  if(!req.session.loginUser){
+    return res.render('notAllowed');
+  }
+  next();
+}
 
 //routes
 app.get("/", (req, res) => {
+  ///console.log(req.session);
   res.render("index");
 });
 
@@ -59,45 +71,40 @@ app.get("/login", (req, res) => {
   res.render("login");
 });
 
-app.get("/protected", (req, res) => {
-  let user = req.cookies.username;
-  console.log(user);
-  res.render("protected", { user });
+//get for the logout route
+app.get('/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/login');
+})
+
+app.get("/protected", protected, (req, res) => {
+  const id = req.session.loginUser._id;
+  res.render("protected", {identifiant: id});
 });
 
 //login an user who's registered in our database
 app.post("/login", async (req, res) => {  
   try {
-  let userFound = await User.findOne({username: req.body.username});
+  const userFound = await User.findOne({username: req.body.username});
 
   let isPasswordValid = bcrypt.compare(req.body.password, userFound.password);
 
+  req.session.loginUser = userFound;
+
   if ( isPasswordValid ){
-    //make the cookie secure
-    res.cookie('username', userFound.username, {
-      httpOnly: true,
-      secure: true
-    });
-    res.cookie('fullname', userFound.fullName, {
-      httpOnly: true,
-      secure: true
-    });
+    
     return res.redirect(`/profile/${userFound._id}`);
   };
 
   res.send('Bad credentials' );
 
   } catch (error) {
+    console.log(error);
     res.send(error);
   }
 });
 
-//disconnect the user
-app.get('/logout', (req, res) => {
-  res.clearCookie('username');
-  res.clearCookie('fullname');
-  res.redirect('/login');
-});
+
 // get the register form
 app.get("/register", (req, res) => {
   res.render("register");
@@ -116,16 +123,13 @@ app.post("/register", async (req, res) => {
     fullName,
     password: hashedPassword
   }).then(user => { 
-    res.cookie('username', user.username);
-    res.cookie('fullname', user.fullName);
-  
     res.redirect(`/profile/${user._id}`); 
   })
   .catch(error => { res.send(error); });
 });
 
 //profile
-app.get("/profile/:id", async (req, res) => {
+app.get("/profile/:id", protected, async (req, res) => {
   try {
     const user = await User.findOne({ _id: req.params.id });
     res.render("profile", { user });
